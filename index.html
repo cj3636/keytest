@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Keyboard Tester — NKRO & Combo Diagnostics</title>
+  <script src="src/js/icons.js" defer></script>
+  <script src="src/js/toasts.js" defer></script>
+  <script src="src/js/keytest.js" defer></script>
+    <link rel="stylesheet" href="src/css/style.css" />
+  <meta name="description" content="Free one‑page keyboard tester for diagnosing stuck modifiers, chatter, NKRO and hotkey issues (Ctrl+C/V/X, Ctrl+Z/Y, etc.). Live per‑key metrics, combo checks, JSON export/import." />
+  <meta name="keywords" content="keyboard tester, nkro, rollover, hotkeys, ctrl z not working, stuck ctrl, key chatter, mechanical keyboard test" />
+  <meta name="author" content="Open source community" />
+  <link rel="canonical" href="https://keytest.org" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Keyboard Tester — NKRO & Combo Diagnostics" />
+  <meta property="og:description" content="Diagnose keyboard issues: stuck modifiers, chatter, hotkeys. Desktop‑first, single file, JSON export/import." />
+  <meta property="og:url" content="https://keytest.org" />
+  <meta property="og:image" content="https://keytest.org/img/logo/keyboard-tester-social.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Keyboard Tester — NKRO & Combo Diagnostics" />
+  <meta name="twitter:description" content="Diagnose keyboard issues: stuck modifiers, chatter, hotkeys. Desktop‑first, single file, JSON export/import." />
+  <meta name="twitter:image" content="https://keytest.org/img/logo/keyboard-tester-social.png" />
+
+  <!-- PWA / Icons (placeholders; serve locally for CSP-friendly deploy) -->
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="/img/icon/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/icon/apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#0b0e12" />
+
+  <!-- Structured Data for AI discovery -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Keyboard Tester",
+    "url": "https://keytest.org",
+    "applicationCategory": "UtilitiesApplication",
+    "description": "A desktop-first, single-page keyboard diagnostic for NKRO, hotkeys, chatter and stuck modifiers, with JSON export/import.",
+    "operatingSystem": "Windows, macOS, Linux",
+    "softwareVersion": "1.2.0",
+    "featureList": [
+      "Per-key metrics (downs/ups/repeat/dwell)",
+      "Combo tests (Ctrl+C/V/X, Ctrl+Z/Y, Ctrl+Shift+Z)",
+      "Anomaly detection (mismatch, bounce, missing events)",
+      "JSON export/import & session report",
+      "Desktop-first UI with toast notifications"
+    ]
+  }
+  </script>
+  </head>
+  <body tabindex="0" id="appRoot" aria-label="Keyboard Tester">
+    <!-- Utility bar: toast controls in top-right -->
+    <div class="util-bar" role="region" aria-label="Notification controls">
+      <div class="toast-controls">
+        <button class="icon-btn" id="muteBtn" aria-pressed="false" aria-label="Open notification history" title="Open notification history">
+          <span id="bellOn" data-icon="bell"></span>
+          <span id="bellOff" data-icon="bellOff" style="display:none"></span>
+          <span class="badge" id="toastActiveCount">0</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Edge flash when muted and toast arrives -->
+    <div class="edge-flash" id="edgeFlash" aria-hidden="true"></div>
+
+    <!-- Toast history panel -->
+    <aside class="history" id="historyPanel" aria-labelledby="historyTitle" role="dialog" aria-modal="false">
+      <header>
+        <h3 id="historyTitle">Notification History</h3>
+        <div class="actions">
+          <label class="mute-toggle">
+            <input type="checkbox" id="muteToggle">
+            <span>Mute notifications</span>
+          </label>
+          <button class="small" id="clearHistory">Clear all</button>
+          <button class="small" id="closeHistory">Close</button>
+        </div>
+      </header>
+      <div class="list" id="historyList"></div>
+    </aside>
+
+    <!-- Toast stack container -->
+    <div class="toast-area" id="toastArea" aria-live="polite" aria-atomic="false"></div>
+    <header>
+      <div class="wrap">
+        <h1>Keyboard Tester <span class="tiny">— NKRO & Combo
+            Diagnostics</span></h1>
+        <div class="subtitle">Click anywhere on the page to focus. With
+          <b>Capture</b> enabled, browser shortcuts are prevented so we can see
+          raw events.</div>
+        <div class="controls">
+          <label class="switch"><input type="checkbox" id="captureToggle"
+              checked /> Capture (prevent default)</label>
+          <button id="resetBtn" title="Clear all stats">Reset</button>
+          <button id="exportBtn"
+            title="Download a JSON report of this session">Export JSON</button>
+          <span class="stat">Active keys: <b><span
+                id="activeCount">0</span></b></span>
+          <span class="stat">Max simultaneous: <b><span
+                id="maxSimul">0</span></b></span>
+          <span class="stat">Events: <b><span
+                id="eventCount">0</span></b></span>
+        </div>
+      </div>
+    </header>
+    <main>
+      <div class="wrap">
+        <section class="status-grid">
+          <div class="card">
+            <h2>Live Status</h2>
+            <div class="row" style="margin-bottom:8px">
+              <div class="stat">Focus: <b id="focusState">unfocused</b></div>
+              <div class="stat">Now: <b id="nowTs">0</b> ms</div>
+            </div>
+            <div class="mods" aria-label="Modifier keys">
+              <div class="mod" id="mCtrl">CTRL</div>
+              <div class="mod" id="mShift">SHIFT</div>
+              <div class="mod" id="mAlt">ALT</div>
+              <div class="mod" id="mMeta">META</div>
+            </div>
+            <div style="height:10px"></div>
+            <div class="kbd-help">
+              <div class="row" style="justify-content: space-between">
+                <div>
+                  <div class="tiny">Currently pressed:</div>
+                  <div class="pressed-keys" id="pressedKeys"></div>
+                </div>
+                <div class="desktop-notice">
+                  <span data-icon="info" class="icon"></span>
+                  <span>Tip: Try pressing many keys at once to check <b>rollover</b>. Then test combos like <b>Ctrl+C/V/X</b>, <b>Ctrl+Z/Y</b>, <b>Ctrl+Shift+Z</b>.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Combo / Hotkey Tests</h2>
+            <div class="combo-list" id="comboList"></div>
+          </div>
+        </section>
+        <section style="margin-top:18px" class="card">
+          <h2>Per-Key Diagnostics</h2>
+          <div class="grid-keys" id="keyGrid" aria-live="polite"></div>
+        </section>
+        <p class="footer-note">Some OS-level shortcuts (e.g., <b>Alt+Tab</b>)
+          cannot be captured by browsers. This tool works best in a regular page
+          (not inside inputs). Keep this tab focused.</p>
+        <div class="desktop-notice center" id="desktopNotice">
+        <span data-icon="warning" class="icon"></span>
+        <span>Desktop. Some OS shortcuts (Win key, Alt+Tab, etc.) can't be captured.</span>
+      </div>
+      </div>
+    </main>
+  </body>
+</html>
