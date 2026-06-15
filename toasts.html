@@ -53,7 +53,11 @@
 
 /* Basic page */
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{
+  width:100%;
+  height:100%;
+  overflow:hidden;
+}
 body{
   margin:0;
   font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
@@ -150,7 +154,7 @@ body{
   pointer-events: auto;
   min-width: var(--minw); max-width: var(--maxw);
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: center;
   column-gap: 12px;
 
@@ -165,6 +169,7 @@ body{
   box-shadow: var(--shadow), var(--ring);
   position: relative;
   overflow: clip;
+  cursor: pointer;
 
   transform: translateX(100%);
   opacity: 0;
@@ -196,32 +201,6 @@ body{
 }
 .toast .t{ font-weight: 700; letter-spacing:.2px; margin-bottom:2px; color: currentColor; }
 .toast .m{ color: var(--muted); font-weight: 500; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; }
-
-/* Controls column: collapse/close buttons */
-.toast .ctrls{ display:flex; align-items:center; gap:6px; }
-.toast .btn{
-  display:grid; place-items:center; width:26px; height:22px;
-  border-radius:6px; cursor:pointer;
-  color: var(--muted); background: color-mix(in oklab, var(--bgGlass) 90%, transparent);
-  border: 1px solid var(--border);
-}
-.toast .btn:hover{ color: var(--text); border-color: color-mix(in oklab, currentColor 25%, var(--border)); }
-.toast .btn svg{ width:14px; height:14px; fill: currentColor; }
-
-/* Collapsed state -> only a thin color bookmark visible */
-.toast.collapsed{
-  width: 0; min-width: 0;
-  padding: 0; border: 0; border-right: 0;
-  box-shadow: none; background: transparent;
-  animation: none;
-}
-.toast.collapsed::before{
-  width: 6px;
-  border-radius: 4px 0 0 4px;
-}
-.toast.collapsed .ico,
-.toast.collapsed .body,
-.toast.collapsed .ctrls{ display:none; }
 
 @keyframes toastIn{
   0%   { transform: translateX(100%); opacity: 0; }
@@ -288,6 +267,15 @@ body{
 .history .item .meta .msg{ color: var(--muted); }
 .history .time{ font-size:12px; color: var(--muted); }
 
+.history .item.entering{
+  animation: historyItemIn 320ms cubic-bezier(.22,.9,.26,1) both;
+  transform-origin: top;
+}
+@keyframes historyItemIn{
+  0%{ opacity:0; transform:translateY(-14px) scaleY(.85); }
+  100%{ opacity:1; transform:translateY(0) scaleY(1); }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce){
   .toast{ animation: none !important; transform:none !important; opacity:1 !important; }
@@ -296,7 +284,15 @@ body{
 
 /* Small helper demo area */
 .demo{
-  max-width: 900px; margin: 120px auto 80px; padding: 0 16px;
+  position:absolute;
+  inset:0;
+  display:grid;
+  align-content:center;
+  max-width:900px;
+  width:100%;
+  margin:auto;
+  padding:72px 16px 24px;
+  overflow:auto;
 }
 .demo h1{ font-size: clamp(22px, 3.5vw, 30px); margin: 0 0 10px; }
 .demo p{ color: var(--muted); margin: 0 0 16px; }
@@ -339,8 +335,7 @@ body{
   <header>
     <h3 id="historyTitle">Notification History</h3>
     <div class="actions">
-      <button class="small" id="clearHistory">Clear all</button>
-      <button class="small" id="closeHistory">Close</button>
+      <button class="small" id="clearHistory">Clear</button>
     </div>
   </header>
   <div class="list" id="historyList"></div>
@@ -352,7 +347,7 @@ body{
 <!-- Demo panel (optional; remove in production) -->
 <section class="demo" aria-hidden="true">
   <h1>Toasts: glass + professional</h1>
-  <p>Click to spawn sample toasts; try muting, opening history, collapsing to bookmark, etc.</p>
+  <p>Click to spawn sample toasts; click any visible toast to dismiss it, or open history to review notifications.</p>
   <div class="row">
     <button data-type="info">Spawn Info</button>
     <button data-type="success">Spawn Success</button>
@@ -373,7 +368,6 @@ body{
 
   const historyPanel = document.getElementById('historyPanel');
   const historyBtn   = document.getElementById('historyBtn');
-  const closeHistory = document.getElementById('closeHistory');
   const clearHistory = document.getElementById('clearHistory');
   const historyList  = document.getElementById('historyList');
 
@@ -404,6 +398,10 @@ body{
     const item = { id, type, title, msg, time: new Date() };
     history.unshift(item);
     setCount(history.length);
+    if (historyPanel.classList.contains('open')){
+      prependHistoryItem(item);
+      return;
+    }
     if (muted){
       flashEdge(type);
       // Do not show toast; silently keep in history.
@@ -436,74 +434,21 @@ body{
         <span class="t">${escapeHTML(item.title)}</span>
         <span class="m">${escapeHTML(item.msg)}</span>
       </span>
-      <span class="ctrls">
-        <button class="btn" data-act="collapse" aria-label="Collapse">
-          ${svgMin('chev')}
-        </button>
-        <button class="btn" data-act="close" aria-label="Dismiss">
-          ${svgMin('x')}
-        </button>
-      </span>
     `;
 
-    // Click body collapses (bookmark strip remains)
-    n.addEventListener('click', (e) => {
-      const tgt = e.target.closest('.btn');
-      if (tgt) return; // buttons handle their own actions
-      toggleCollapse(n, true);
-    });
-
-    n.querySelector('[data-act="collapse"]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleCollapse(n, !n.classList.contains('collapsed'));
-    });
-    n.querySelector('[data-act="close"]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      removeToast(n);
-    });
+    // Clicking anywhere on the toast dismisses it immediately.
+    n.addEventListener('click', () => removeToast(n));
 
     toastArea.prepend(n);
     active.unshift(n);
 
-    // Auto-collapse after life
+    // Auto-remove after its visible lifetime.
     const life = msVar('--life', 5200);
-    n._collapseTimer = setTimeout(() => {
-      toggleCollapse(n, true);
-    }, life);
-
-    // Auto-remove after collapsedLife (unless reopened)
-    const collapsedLife = msVar('--collapsedLife', 2600);
-    n._removeTimer = setTimeout(() => {
-      removeToast(n);
-    }, life + collapsedLife);
-  }
-
-  function toggleCollapse(n, makeCollapsed){
-    if (!n) return;
-    if (makeCollapsed){
-      n.classList.add('collapsed');
-      // Reopen when clicking the stripe
-      n.addEventListener('click', reopenOnce, { once: true });
-    } else {
-      n.classList.remove('collapsed');
-      // Extend life when reopened
-      clearTimeout(n._removeTimer);
-      const extra = msVar('--collapsedLife', 2600);
-      n._removeTimer = setTimeout(() => removeToast(n), extra);
-    }
-    function reopenOnce(e){
-      // Only if clicking near the right edge stripe? We use whole element here.
-      n.classList.remove('collapsed');
-      // give it a fresh collapsed removal timer
-      clearTimeout(n._removeTimer);
-      const extra = msVar('--collapsedLife', 2600);
-      n._removeTimer = setTimeout(() => removeToast(n), extra);
-    }
+    n._removeTimer = setTimeout(() => removeToast(n), life);
   }
 
   function removeToast(n){
     if (!n || !toastArea.contains(n)) return;
-    clearTimeout(n._collapseTimer);
     clearTimeout(n._removeTimer);
     n.style.animation = `toastOut 240ms ease forwards`;
     n.addEventListener('animationend', () => {
@@ -522,13 +467,6 @@ body{
       danger:  '<path d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm-1 13h2v2h-2v-2Zm0-8h2v6h-2V7Z"/>'
     };
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[type] || paths.info}</svg>`;
-  }
-  function svgMin(which){
-    switch(which){
-      case 'x':    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
-      case 'chev': return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
-    }
-    return '';
   }
   function escapeHTML(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function msVar(name, fallback){
@@ -551,29 +489,45 @@ body{
     renderHistory();
     historyPanel.classList.add('open');
   });
-  closeHistory.addEventListener('click', () => historyPanel.classList.remove('open'));
   clearHistory.addEventListener('click', () => {
     history = [];
     setCount(0);
     renderHistory();
   });
 
+  document.addEventListener('pointerdown', (e) => {
+    if (!historyPanel.classList.contains('open')) return;
+    if (historyPanel.contains(e.target) || historyBtn.contains(e.target)) return;
+    historyPanel.classList.remove('open');
+  });
+
+  function historyItemHTML(h, extraClass = ''){
+    const colorVar = ({
+      info:'--c-info', success:'--c-success', warning:'--c-warning', danger:'--c-danger'
+    }[h.type]||'--c-info');
+    const time = h.time instanceof Date ? h.time : new Date(h.time);
+    return `
+      <div class="item ${extraClass}">
+        <div class="bar" style="background: var(${colorVar})"></div>
+        <div class="meta">
+          <div class="title">${escapeHTML(h.title)}</div>
+          <div class="msg">${escapeHTML(h.msg)}</div>
+        </div>
+        <div class="time" title="${time.toLocaleString()}">${time.toLocaleTimeString()}</div>
+      </div>`;
+  }
+
+  function prependHistoryItem(item){
+    const emptyState = historyList.querySelector('.item');
+    if (history.length === 1 && emptyState) historyList.innerHTML = '';
+    historyList.insertAdjacentHTML('afterbegin', historyItemHTML(item, 'entering'));
+    const inserted = historyList.firstElementChild;
+    inserted?.addEventListener('animationend', () => inserted.classList.remove('entering'), { once:true });
+    historyList.scrollTop = 0;
+  }
+
   function renderHistory(){
-    historyList.innerHTML = history.map(h => {
-      const colorVar = ({
-        info:'--c-info', success:'--c-success', warning:'--c-warning', danger:'--c-danger'
-      }[h.type]||'--c-info');
-      const time = h.time instanceof Date ? h.time : new Date(h.time);
-      return `
-        <div class="item">
-          <div class="bar" style="background: var(${colorVar})"></div>
-          <div class="meta">
-            <div class="title">${escapeHTML(h.title)}</div>
-            <div class="msg">${escapeHTML(h.msg)}</div>
-          </div>
-          <div class="time" title="${time.toLocaleString()}">${time.toLocaleTimeString()}</div>
-        </div>`;
-    }).join('') || `<div class="item"><div class="bar" style="background:var(--c-info)"></div><div class="meta"><div class="title">No notifications yet</div><div class="msg">New toasts will appear here.</div></div><div class="time"></div></div>`;
+    historyList.innerHTML = history.map(h => historyItemHTML(h)).join('') || `<div class="item"><div class="bar" style="background:var(--c-info)"></div><div class="meta"><div class="title">No notifications yet</div><div class="msg">New toasts will appear here.</div></div><div class="time"></div></div>`;
   }
 
   /* Demo buttons */
