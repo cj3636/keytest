@@ -54,10 +54,13 @@
     <!-- Utility bar: toast controls in top-right -->
     <div class="util-bar" role="region" aria-label="Notification controls">
       <div class="toast-controls">
-        <button class="icon-btn" id="muteBtn" aria-pressed="false" aria-label="Open notification history" title="Open notification history">
+        <button class="icon-btn" id="muteBtn" aria-pressed="false" aria-label="Toggle toast mute" title="Mute / Unmute notifications">
           <span id="bellOn" data-icon="bell"></span>
           <span id="bellOff" data-icon="bellOff" style="display:none"></span>
-          <span class="badge" id="toastActiveCount">0</span>
+          <span class="badge" id="toastCount">0</span>
+        </button>
+        <button class="icon-btn" id="historyBtn" aria-label="Open notification history" title="Open notification history">
+          <span data-icon="history"></span>
         </button>
       </div>
     </div>
@@ -70,12 +73,7 @@
       <header>
         <h3 id="historyTitle">Notification History</h3>
         <div class="actions">
-          <label class="mute-toggle">
-            <input type="checkbox" id="muteToggle">
-            <span>Mute notifications</span>
-          </label>
-          <button class="small" id="clearHistory">Clear all</button>
-          <button class="small" id="closeHistory">Close</button>
+          <button class="small" id="clearHistory">Clear</button>
         </div>
       </header>
       <div class="list" id="historyList"></div>
